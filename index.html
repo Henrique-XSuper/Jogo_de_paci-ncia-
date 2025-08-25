@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solitário Drag & Drop</title>
+<style>
+body {
+  background: green;
+  margin: 0;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+  color: white;
+}
+.board { display: flex; justify-content: space-between; flex-wrap: wrap; margin-bottom: 20px; }
+.pile { width: 100px; min-height: 140px; border: 2px solid white; border-radius: 8px; position: relative; margin: 10px; }
+.card { width: 100px; height: 140px; border-radius: 8px; border: 1px solid black; position: absolute; background: white; display: flex; align-items: center; justify-content: center; font-size: 22px; cursor: grab; user-select: none; }
+.card.back { background: blue; color: transparent; cursor: pointer; }
+.card.dragging { opacity: 0.7; transform: scale(1.05); z-index: 1000; }
+</style>
+</head>
+<body>
+<h1>Solitário Drag & Drop</h1>
+
+<div class="board">
+  <div id="stock" class="pile"></div>
+  <div id="waste" class="pile"></div>
+  <div id="foundation-0" class="pile"></div>
+  <div id="foundation-1" class="pile"></div>
+  <div id="foundation-2" class="pile"></div>
+  <div id="foundation-3" class="pile"></div>
+</div>
+
+<div class="board">
+  <div id="tableau-0" class="pile"></div>
+  <div id="tableau-1" class="pile"></div>
+  <div id="tableau-2" class="pile"></div>
+  <div id="tableau-3" class="pile"></div>
+  <div id="tableau-4" class="pile"></div>
+  <div id="tableau-5" class="pile"></div>
+  <div id="tableau-6" class="pile"></div>
+</div>
+
+<script>
+class Card {
+  constructor(suit, rank) { this.suit=suit; this.rank=rank; this.faceUp=false; }
+  get color() { return (this.suit==='♥'||this.suit==='♦') ? 'red':'black'; }
+  get value() { return ['A','2','3','4','5','6','7','8','9','10','J','Q','K'].indexOf(this.rank)+1; }
+}
+
+class Game {
+  constructor() {
+    this.suits = ['♠','♥','♦','♣'];
+    this.ranks = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+    this.deck = [];
+    this.tableau = [[],[],[],[],[],[],[]];
+    this.foundations = [[],[],[],[]];
+    this.stock = [];
+    this.waste = [];
+    this.draggedCards = null;
+    this.draggedFrom = null;
+    this.init();
+  }
+
+  init(){
+    this.deck=[];
+    for(let s of this.suits) for(let r of this.ranks) this.deck.push(new Card(s,r));
+    this.deck.sort(()=>Math.random()-0.5);
+    // distribuir tableau
+    for(let i=0;i<7;i++){
+      for(let j=0;j<=i;j++){
+        let c=this.deck.pop();
+        if(j===i) c.faceUp=true;
+        this.tableau[i].push(c);
+      }
+    }
+    this.stock=this.deck.splice(0);
+    this.render();
+  }
+
+  createCardElement(card){
+    const el=document.createElement('div');
+    el.classList.add('card');
+    if(!card.faceUp) el.classList.add('back');
+    else { el.textContent=`${card.rank}${card.suit}`; el.style.color=card.color; }
+    return el;
+  }
+
+  render(){
+    this.renderStock();
+    this.renderWaste();
+    this.renderFoundations();
+    this.renderTableau();
+  }
+
+  renderStock(){
+    const s=document.getElementById('stock');
+    s.innerHTML='';
+    if(this.stock.length>0){
+      const el=this.createCardElement(new Card('',''));
+      el.addEventListener('click', ()=>this.drawStock());
+      s.appendChild(el);
+    }
+  }
+
+  renderWaste(){
+    const w=document.getElementById('waste');
+    w.innerHTML='';
+    if(this.waste.length>0){
+      const top=this.waste[this.waste.length-1];
+      const el=this.createCardElement(top);
+      el.addEventListener('dblclick', ()=>this.moveToFoundation(top,this.waste));
+      el.draggable=true;
+      el.addEventListener('dragstart', e=>this.startDrag(e,[top],this.waste));
+      w.appendChild(el);
+    }
+  }
+
+  renderFoundations(){
+    for(let i=0;i<4;i++){
+      const f=document.getElementById(`foundation-${i}`);
+      f.innerHTML='';
+      if(this.foundations[i].length>0){
+        const top=this.foundations[i][this.foundations[i].length-1];
+        const el=this.createCardElement(top);
+        f.appendChild(el);
+      }
+      f.addEventListener('dragover', e=>e.preventDefault());
+      f.addEventListener('drop', e=>this.dropOnFoundation(i));
+    }
+  }
+
+  renderTableau(){
+    for(let c=0;c<7;c++){
+      const t=document.getElementById(`tableau-${c}`);
+      t.innerHTML='';
+      this.tableau[c].forEach((card,i)=>{
+        const el=this.createCardElement(card);
+        el.style.top=`${i*30}px`;
+        el.style.zIndex=i+1;
+        if(!card.faceUp && i===this.tableau[c].length-1){
+          el.addEventListener('click', ()=>{ card.faceUp=true; this.render(); });
+        }
+        if(card.faceUp){
+          el.draggable=true;
+          el.addEventListener('dragstart', e=>this.startDrag(e,this.tableau[c].slice(i),this.tableau[c]));
+        }
+        t.appendChild(el);
+      });
+      t.addEventListener('dragover', e=>e.preventDefault());
+      t.addEventListener('drop', e=>this.dropOnTableau(c));
+    }
+  }
+
+  drawStock(){
+    if(this.stock.length===0){ this.stock=this.waste.reverse(); this.waste=[]; }
+    else{ let c=this.stock.pop(); c.faceUp=true; this.waste.push(c); }
+    this.render();
+  }
+
+  startDrag(e,cards,from){
+    this.draggedCards=cards;
+    this.draggedFrom=from;
+    e.dataTransfer.setData('text','drag');
+    setTimeout(()=>{ cards.forEach(c=>c.dragging=true); this.render(); },0);
+  }
+
+  dropOnTableau(col){
+    if(!this.draggedCards) return;
+    const target=this.tableau[col];
+    const first=this.draggedCards[0];
+    const top=target[target.length-1];
+    if((!top && first.rank==='K') || (top && top.faceUp && top.color!==first.color && top.value===first.value+1)){
+      target.push(...this.draggedCards);
+      this.draggedFrom.splice(-this.draggedCards.length);
+      this.flipLastCard(this.draggedFrom);
+    }
+    this.draggedCards=null; this.draggedFrom=null; this.render();
+  }
+
+  dropOnFoundation(i){
+    if(!this.draggedCards || this.draggedCards.length!==1) return;
+    const card=this.draggedCards[0];
+    const f=this.foundations[i];
+    if((f.length===0 && card.rank==='A') || (f.length>0 && f[f.length-1].suit===card.suit && f[f.length-1].value+1===card.value)){
+      f.push(card);
+      this.draggedFrom.splice(this.draggedFrom.indexOf(card),1);
+      this.flipLastCard(this.draggedFrom);
+    }
+    this.draggedCards=null; this.draggedFrom=null; this.render();
+  }
+
+  flipLastCard(pile){
+    if(pile && pile.length>0){
+      const last=pile[pile.length-1];
+      if(!last.faceUp) last.faceUp=true;
+    }
+  }
+
+  moveToFoundation(card,pile){
+    for(let i=0;i<4;i++){
+      const f=this.foundations[i];
+      if((f.length===0 && card.rank==='A') || (f.length>0 && f[f.length-1].suit===card.suit && f[f.length-1].value+1===card.value)){
+        f.push(card); pile.splice(pile.indexOf(card),1); this.flipLastCard(pile); this.render(); return;
+      }
+    }
+  }
+}
+
+const game=new Game();
+</script>
+</body>
+</html>
+
