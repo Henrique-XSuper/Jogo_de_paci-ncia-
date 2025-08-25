@@ -3,212 +3,246 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Solitário Drag & Drop</title>
+<title>Paciência Clássica</title>
 <style>
-body {
-  background: green;
-  margin: 0;
-  padding: 20px;
-  font-family: Arial, sans-serif;
-  color: white;
-}
-.board { display: flex; justify-content: space-between; flex-wrap: wrap; margin-bottom: 20px; }
-.pile { width: 100px; min-height: 140px; border: 2px solid white; border-radius: 8px; position: relative; margin: 10px; }
-.card { width: 100px; height: 140px; border-radius: 8px; border: 1px solid black; position: absolute; background: white; display: flex; align-items: center; justify-content: center; font-size: 22px; cursor: grab; user-select: none; }
-.card.back { background: blue; color: transparent; cursor: pointer; }
-.card.dragging { opacity: 0.7; transform: scale(1.05); z-index: 1000; }
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Roboto',sans-serif;background:#0f4c3a;display:flex;justify-content:center;align-items:flex-start;padding:20px;min-height:100vh;}
+
+.game-container{width:100%;max-width:1200px;}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
+.header h1{font-size:2rem;color:#fff;}
+.new-game-btn{padding:5px 12px;background:#ff6b6b;border:none;border-radius:6px;cursor:pointer;color:white;font-weight:700;transition:.3s;}
+.new-game-btn:hover{background:#ff4c4c;}
+
+.stats{color:white;font-weight:700;display:flex;gap:15px;align-items:center;}
+
+.game-board{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;position:relative;min-height:400px;}
+.foundation,.tableau-pile,.stock,.waste{border:2px dashed rgba(255,255,255,0.3);border-radius:8px;position:relative;min-height:120px;background:rgba(255,255,255,0.05);}
+.card{width:70px;height:100px;border-radius:8px;position:absolute;background:white;display:flex;flex-direction:column;justify-content:space-between;align-items:center;font-weight:700;cursor:pointer;box-shadow:0 3px 8px rgba(0,0,0,0.4);user-select:none;transition:.3s;display:flex;justify-content:center;align-items:center;}
+.card.red{color:#e74c3c;}
+.card.face-down{background: linear-gradient(135deg,#1e3c72,#2a5298); color:white; cursor:default; font-size:24px;}
+.card.dragging{opacity:0.9;transform:scale(1.1);z-index:1000;box-shadow:0 10px 25px rgba(0,0,0,0.6);}
+
+.tableau-pile{min-height:150px;}
+.tableau-pile .card{position:absolute;}
+@media(max-width:768px){.card{width:50px;height:70px;font-size:14px;}.tableau-pile{min-height:100px;}}
+
+/* Vitória e confete */
+.win-message{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:white;padding:30px;border-radius:15px;text-align:center;z-index:2000;display:none;backdrop-filter:blur(10px);}
+.win-title{font-size:2rem;color:#4ecdc4;margin-bottom:15px;}
+.celebration{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1500;}
+.confetti{position:absolute;width:8px;height:8px;background:#4ecdc4;animation:confetti-fall 3s linear infinite;}
+@keyframes confetti-fall{0%{transform:translateY(-100vh) rotate(0deg);opacity:1;}100%{transform:translateY(100vh) rotate(720deg);opacity:0;}}
 </style>
 </head>
 <body>
-<h1>Solitário Drag & Drop</h1>
 
-<div class="board">
-  <div id="stock" class="pile"></div>
-  <div id="waste" class="pile"></div>
-  <div id="foundation-0" class="pile"></div>
-  <div id="foundation-1" class="pile"></div>
-  <div id="foundation-2" class="pile"></div>
-  <div id="foundation-3" class="pile"></div>
+<div class="game-container">
+  <div class="header">
+    <h1>🃏 Paciência</h1>
+    <div class="stats">
+      ⏱️ <span id="time">00:00</span> 🎯 <span id="moves">0</span> ⭐ <span id="score">0</span>
+    </div>
+    <button class="new-game-btn" onclick="game.newGame()">🔄 Novo Jogo</button>
+  </div>
+
+  <div class="game-board">
+    <div class="stock" id="stock"></div>
+    <div class="waste" id="waste"></div>
+    <div></div>
+    <div class="foundation" id="foundation-0"></div>
+    <div class="foundation" id="foundation-1"></div>
+    <div class="foundation" id="foundation-2"></div>
+    <div class="foundation" id="foundation-3"></div>
+    <div class="tableau-pile" id="tableau-0"></div>
+    <div class="tableau-pile" id="tableau-1"></div>
+    <div class="tableau-pile" id="tableau-2"></div>
+    <div class="tableau-pile" id="tableau-3"></div>
+    <div class="tableau-pile" id="tableau-4"></div>
+    <div class="tableau-pile" id="tableau-5"></div>
+    <div class="tableau-pile" id="tableau-6"></div>
+  </div>
 </div>
 
-<div class="board">
-  <div id="tableau-0" class="pile"></div>
-  <div id="tableau-1" class="pile"></div>
-  <div id="tableau-2" class="pile"></div>
-  <div id="tableau-3" class="pile"></div>
-  <div id="tableau-4" class="pile"></div>
-  <div id="tableau-5" class="pile"></div>
-  <div id="tableau-6" class="pile"></div>
+<div class="win-message" id="winMessage">
+  <div class="win-title">🎉 Parabéns!</div>
+  <div>Você venceu o jogo!</div>
+  <div class="stats">
+    ⏱️ <span id="finalTime"></span> 🎯 <span id="finalMoves"></span> ⭐ <span id="finalScore"></span>
+  </div>
+  <button class="new-game-btn" onclick="game.closeWinMessage()">🔄 Jogar Novamente</button>
 </div>
+
+<div class="celebration" id="celebration"></div>
 
 <script>
-class Card {
-  constructor(suit, rank) { this.suit=suit; this.rank=rank; this.faceUp=false; }
-  get color() { return (this.suit==='♥'||this.suit==='♦') ? 'red':'black'; }
-  get value() { return ['A','2','3','4','5','6','7','8','9','10','J','Q','K'].indexOf(this.rank)+1; }
-}
-
-class Game {
-  constructor() {
-    this.suits = ['♠','♥','♦','♣'];
-    this.ranks = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
-    this.deck = [];
-    this.tableau = [[],[],[],[],[],[],[]];
-    this.foundations = [[],[],[],[]];
-    this.stock = [];
-    this.waste = [];
-    this.draggedCards = null;
-    this.draggedFrom = null;
+class Solitaire {
+  constructor(){
+    this.suits=['♠','♥','♣','♦']; this.ranks=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+    this.stock=[]; this.waste=[]; this.foundations=[[],[],[],[]]; this.tableau=[[],[],[],[],[],[],[]];
+    this.draggedCard=null; this.draggedFrom=null; this.offsetX=0; this.offsetY=0;
+    this.moves=0; this.score=0; this.startTime=null; this.timer=null;
     this.init();
   }
 
-  init(){
+  init(){ this.newGame(); }
+
+  newGame(){
     this.deck=[];
-    for(let s of this.suits) for(let r of this.ranks) this.deck.push(new Card(s,r));
-    this.deck.sort(()=>Math.random()-0.5);
-    // distribuir tableau
-    for(let i=0;i<7;i++){
-      for(let j=0;j<=i;j++){
-        let c=this.deck.pop();
-        if(j===i) c.faceUp=true;
-        this.tableau[i].push(c);
-      }
+    for(let s of this.suits) for(let r of this.ranks)
+      this.deck.push({suit:s, rank:r, color:(s==='♥'||s==='♦')?'red':'black', faceUp:false, id:`${s}${r}`});
+    for(let i=this.deck.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1)); [this.deck[i],this.deck[j]]=[this.deck[j],this.deck[i]];}
+
+    this.stock=[...this.deck]; this.waste=[]; this.foundations=[[],[],[],[]]; this.tableau=[[],[],[],[],[],[],[]];
+    this.moves=0; this.score=0; this.startTime=Date.now();
+    if(this.timer) clearInterval(this.timer);
+    this.timer=setInterval(()=>this.updateTime(),1000);
+
+    for(let i=0;i<7;i++) for(let j=0;j<=i;j++){
+      let card=this.stock.pop(); card.faceUp=(j===i); this.tableau[i].push(card);
     }
-    this.stock=this.deck.splice(0);
-    this.render();
+    this.render(); this.bindEvents();
+  }
+
+  render(){
+    this.renderStock(); this.renderWaste(); this.renderFoundations(); this.renderTableau();
+    document.getElementById('moves').innerText=this.moves; document.getElementById('score').innerText=this.score;
+  }
+
+  renderStock(){ const stockEl=document.getElementById('stock'); stockEl.innerHTML=''; if(this.stock.length>0){ let cardEl=document.createElement('div'); cardEl.className='card face-down'; stockEl.appendChild(cardEl); }}
+
+  renderWaste(){ const wasteEl=document.getElementById('waste'); wasteEl.innerHTML=''; if(this.waste.length>0){ const card=this.waste[this.waste.length-1]; wasteEl.appendChild(this.createCardElement(card)); }}
+
+  renderFoundations(){ for(let i=0;i<4;i++){ const el=document.getElementById(`foundation-${i}`); el.innerHTML=''; if(this.foundations[i].length>0) el.appendChild(this.createCardElement(this.foundations[i][this.foundations[i].length-1])); }}
+
+  renderTableau(){
+    for(let i=0;i<7;i++){
+      const el=document.getElementById(`tableau-${i}`); el.innerHTML='';
+      this.tableau[i].forEach((card,index)=>{
+        const cardEl=this.createCardElement(card);
+        cardEl.style.top=`${index*25}px`;
+        cardEl.dataset.col=i;
+        el.appendChild(cardEl);
+      });
+    }
   }
 
   createCardElement(card){
     const el=document.createElement('div');
-    el.classList.add('card');
-    if(!card.faceUp) el.classList.add('back');
-    else { el.textContent=`${card.rank}${card.suit}`; el.style.color=card.color; }
+    el.className=`card ${card.color} ${card.faceUp?'':'face-down'}`;
+    el.dataset.id=card.id;
+    el.innerHTML=card.faceUp?`${card.rank}${card.suit}`:'🂠';
+    el.onmousedown=(e)=>this.startDrag(e,card); el.ontouchstart=(e)=>this.startDrag(e,card);
     return el;
   }
 
-  render(){
-    this.renderStock();
-    this.renderWaste();
-    this.renderFoundations();
-    this.renderTableau();
+  startDrag(e,card){
+    if(!card.faceUp) return; e.preventDefault();
+    this.draggedCard=card;
+    this.draggedFrom=e.target.closest('.tableau-pile')?.id || 'waste';
+    const rect=e.target.getBoundingClientRect();
+    this.offsetX=(e.clientX||e.touches[0].clientX)-rect.left;
+    this.offsetY=(e.clientY||e.touches[0].clientY)-rect.top;
+    document.onmousemove=(ev)=>this.drag(ev);
+    document.onmouseup=()=>this.drop();
+    document.ontouchmove=(ev)=>this.drag(ev);
+    document.ontouchend=()=>this.drop();
   }
 
-  renderStock(){
-    const s=document.getElementById('stock');
-    s.innerHTML='';
-    if(this.stock.length>0){
-      const el=this.createCardElement(new Card('',''));
-      el.addEventListener('click', ()=>this.drawStock());
-      s.appendChild(el);
-    }
-  }
+  drag(e){ if(!this.draggedCard) return; const el=document.querySelector(`[data-id='${this.draggedCard.id}']`); el.classList.add('dragging'); const x=(e.clientX||e.touches[0].clientX)-this.offsetX; const y=(e.clientY||e.touches[0].clientY)-this.offsetY; el.style.position='fixed'; el.style.left=x+'px'; el.style.top=y+'px'; }
 
-  renderWaste(){
-    const w=document.getElementById('waste');
-    w.innerHTML='';
-    if(this.waste.length>0){
-      const top=this.waste[this.waste.length-1];
-      const el=this.createCardElement(top);
-      el.addEventListener('dblclick', ()=>this.moveToFoundation(top,this.waste));
-      el.draggable=true;
-      el.addEventListener('dragstart', e=>this.startDrag(e,[top],this.waste));
-      w.appendChild(el);
-    }
-  }
+  drop(){
+    if(!this.draggedCard) return;
+    const el=document.querySelector(`[data-id='${this.draggedCard.id}']`);
+    el.classList.remove('dragging'); el.style.position='absolute'; el.style.left='0'; el.style.top='0';
+    let moved=false;
 
-  renderFoundations(){
-    for(let i=0;i<4;i++){
-      const f=document.getElementById(`foundation-${i}`);
-      f.innerHTML='';
-      if(this.foundations[i].length>0){
-        const top=this.foundations[i][this.foundations[i].length-1];
-        const el=this.createCardElement(top);
-        f.appendChild(el);
-      }
-      f.addEventListener('dragover', e=>e.preventDefault());
-      f.addEventListener('drop', e=>this.dropOnFoundation(i));
-    }
-  }
-
-  renderTableau(){
-    for(let c=0;c<7;c++){
-      const t=document.getElementById(`tableau-${c}`);
-      t.innerHTML='';
-      this.tableau[c].forEach((card,i)=>{
-        const el=this.createCardElement(card);
-        el.style.top=`${i*30}px`;
-        el.style.zIndex=i+1;
-        if(!card.faceUp && i===this.tableau[c].length-1){
-          el.addEventListener('click', ()=>{ card.faceUp=true; this.render(); });
+    document.querySelectorAll('.tableau-pile').forEach((pile,i)=>{
+      const rect=pile.getBoundingClientRect();
+      if(rect.left<window.event.clientX && window.event.clientX<rect.right && rect.top<window.event.clientY && window.event.clientY<rect.bottom){
+        if(this.canMoveTableau(this.draggedCard,this.draggedFrom,i)){
+          this.moveTableau(this.draggedFrom,i,this.draggedCard); moved=true; this.moves++; this.score+=5;
         }
-        if(card.faceUp){
-          el.draggable=true;
-          el.addEventListener('dragstart', e=>this.startDrag(e,this.tableau[c].slice(i),this.tableau[c]));
-        }
-        t.appendChild(el);
-      });
-      t.addEventListener('dragover', e=>e.preventDefault());
-      t.addEventListener('drop', e=>this.dropOnTableau(c));
-    }
-  }
-
-  drawStock(){
-    if(this.stock.length===0){ this.stock=this.waste.reverse(); this.waste=[]; }
-    else{ let c=this.stock.pop(); c.faceUp=true; this.waste.push(c); }
-    this.render();
-  }
-
-  startDrag(e,cards,from){
-    this.draggedCards=cards;
-    this.draggedFrom=from;
-    e.dataTransfer.setData('text','drag');
-    setTimeout(()=>{ cards.forEach(c=>c.dragging=true); this.render(); },0);
-  }
-
-  dropOnTableau(col){
-    if(!this.draggedCards) return;
-    const target=this.tableau[col];
-    const first=this.draggedCards[0];
-    const top=target[target.length-1];
-    if((!top && first.rank==='K') || (top && top.faceUp && top.color!==first.color && top.value===first.value+1)){
-      target.push(...this.draggedCards);
-      this.draggedFrom.splice(-this.draggedCards.length);
-      this.flipLastCard(this.draggedFrom);
-    }
-    this.draggedCards=null; this.draggedFrom=null; this.render();
-  }
-
-  dropOnFoundation(i){
-    if(!this.draggedCards || this.draggedCards.length!==1) return;
-    const card=this.draggedCards[0];
-    const f=this.foundations[i];
-    if((f.length===0 && card.rank==='A') || (f.length>0 && f[f.length-1].suit===card.suit && f[f.length-1].value+1===card.value)){
-      f.push(card);
-      this.draggedFrom.splice(this.draggedFrom.indexOf(card),1);
-      this.flipLastCard(this.draggedFrom);
-    }
-    this.draggedCards=null; this.draggedFrom=null; this.render();
-  }
-
-  flipLastCard(pile){
-    if(pile && pile.length>0){
-      const last=pile[pile.length-1];
-      if(!last.faceUp) last.faceUp=true;
-    }
-  }
-
-  moveToFoundation(card,pile){
-    for(let i=0;i<4;i++){
-      const f=this.foundations[i];
-      if((f.length===0 && card.rank==='A') || (f.length>0 && f[f.length-1].suit===card.suit && f[f.length-1].value+1===card.value)){
-        f.push(card); pile.splice(pile.indexOf(card),1); this.flipLastCard(pile); this.render(); return;
       }
+    });
+
+    document.querySelectorAll('.foundation').forEach((f,i)=>{
+      const rect=f.getBoundingClientRect();
+      if(rect.left<window.event.clientX && window.event.clientX<rect.right && rect.top<window.event.clientY && window.event.clientY<rect.bottom){
+        if(this.canMoveFoundation(this.draggedCard,i)){
+          this.foundations[i].push(this.draggedCard);
+          if(this.draggedFrom!=='waste'){ const fromCol=parseInt(this.draggedFrom.split('-')[1]); this.tableau[fromCol]=this.tableau[fromCol].filter(c=>c.id!==this.draggedCard.id); if(this.tableau[fromCol].length>0) this.tableau[fromCol][this.tableau[fromCol].length-1].faceUp=true; }
+          else this.waste.pop();
+          moved=true; this.moves++; this.score+=10;
+        }
+      }
+    });
+
+    if(!moved && this.draggedFrom==='waste'){ this.waste.push(this.draggedCard); }
+    this.draggedCard=null; this.draggedFrom=null;
+    this.render(); this.checkWin();
+  }
+
+  canMoveTableau(card,from,to){ const dest=this.tableau[to]; if(dest.length===0) return card.rank==='K'; const top=dest[dest.length-1]; const val=this.ranks.indexOf(card.rank); const topVal=this.ranks.indexOf(top.rank); return card.color!==top.color && val===topVal-1; }
+
+  moveTableau(from,to,card){
+    const colFrom=from==='waste'?this.waste:this.tableau[parseInt(from.split('-')[1])];
+    const index=colFrom.findIndex(c=>c.id===card.id);
+    const moving=colFrom.splice(index);
+    this.tableau[to]=this.tableau[to].concat(moving);
+    if(from!=='waste'){ const f=parseInt(from.split('-')[1]); if(this.tableau[f].length>0) this.tableau[f][this.tableau[f].length-1].faceUp=true; }
+  }
+
+  canMoveFoundation(card,index){
+    const pile=this.foundations[index]; if(pile.length===0) return card.rank==='A';
+    const top=pile[pile.length-1]; const val=this.ranks.indexOf(card.rank); const topVal=this.ranks.indexOf(top.rank);
+    return card.suit===top.suit && val===topVal+1;
+  }
+
+  bindEvents(){ document.getElementById('stock').onclick=()=>this.drawCard(); }
+
+  drawCard(){
+    if(this.stock.length===0){ this.stock=[...this.waste.reverse()]; this.waste=[]; }
+    else{ const card=this.stock.pop(); card.faceUp=true; this.waste.push(card); this.moves++; this.score++; }
+    this.render(); this.checkWin();
+  }
+
+  updateTime(){
+    const diff=Math.floor((Date.now()-this.startTime)/1000); const m=Math.floor(diff/60).toString().padStart(2,'0'); const s=(diff%60).toString().padStart(2,'0'); document.getElementById('time').innerText=`${m}:${s}`;
+  }
+
+  checkWin(){
+    if(this.foundations.every(f=>f.length===13)){ this.showWin(); }
+  }
+
+  showWin(){
+    document.getElementById('winMessage').style.display='block';
+    document.getElementById('finalTime').innerText=document.getElementById('time').innerText;
+    document.getElementById('finalMoves').innerText=this.moves;
+    document.getElementById('finalScore').innerText=this.score;
+    this.startConfetti();
+  }
+
+  closeWinMessage(){
+    document.getElementById('winMessage').style.display='none';
+    document.getElementById('celebration').innerHTML='';
+    this.newGame();
+  }
+
+  startConfetti(){
+    const c=document.getElementById('celebration'); c.innerHTML='';
+    for(let i=0;i<100;i++){
+      const d=document.createElement('div'); d.className='confetti'; d.style.left=Math.random()*window.innerWidth+'px'; d.style.backgroundColor=`hsl(${Math.random()*360},70%,60%)`; c.appendChild(d);
     }
+    setTimeout(()=>{ c.innerHTML=''; },3000);
   }
 }
 
-const game=new Game();
+const game=new Solitaire();
 </script>
 </body>
 </html>
 
+  
