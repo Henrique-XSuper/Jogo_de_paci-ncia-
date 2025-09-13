@@ -80,9 +80,11 @@ body{font-family:'Roboto',sans-serif;background:#0f4c3a;display:flex;justify-con
 <script>
 class Solitaire {
   constructor(){
-    this.suits=['♠','♥','♣','♦']; this.ranks=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+    this.suits=['♠','♥','♣','♦'];
+    this.ranks=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
     this.stock=[]; this.waste=[]; this.foundations=[[],[],[],[]]; this.tableau=[[],[],[],[],[],[],[]];
     this.draggedCard=null; this.draggedFrom=null; this.offsetX=0; this.offsetY=0;
+    this.lastX=0; this.lastY=0;
     this.moves=0; this.score=0; this.startTime=null; this.timer=null;
     this.init();
   }
@@ -92,7 +94,8 @@ class Solitaire {
   newGame(){
     this.deck=[];
     for(let s of this.suits) for(let r of this.ranks)
-      this.deck.push({suit:s, rank:r, color:(s==='♥'||s==='♦')?'red':'black', faceUp:false, id:`${s}${r}`});
+      this.deck.push({suit:s, rank:r, color:(s==='♥'||s==='♦')?'red':'black', faceUp:false, id:`${s}${r}${Math.random().toString(36).slice(2,7)}`});
+    // shuffle
     for(let i=this.deck.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1)); [this.deck[i],this.deck[j]]=[this.deck[j],this.deck[i]];}
 
     this.stock=[...this.deck]; this.waste=[]; this.foundations=[[],[],[],[]]; this.tableau=[[],[],[],[],[],[],[]];
@@ -100,10 +103,314 @@ class Solitaire {
     if(this.timer) clearInterval(this.timer);
     this.timer=setInterval(()=>this.updateTime(),1000);
 
-    for(let i=0;i<7;i++) for(let j=0;j<=i;j++){
-      let card=this.stock.pop(); card.faceUp=(j===i); this.tableau[i].push(card);
+    // deal tableau
+    for(let i=0;i<7;i++){
+      for(let j=0;j<=i;j++){
+        let card=this.stock.pop();
+        card.faceUp=(j===i);
+        this.tableau[i].push(card);
+      }
     }
     this.render(); this.bindEvents();
+  }
+
+  render(){
+    this.renderStock(); this.renderWaste(); this.renderFoundations(); this.renderTableau();
+    document.getElementById('moves').innerText=this.moves;
+    document.getElementById('score').innerText=this.score;
+  }
+
+  renderStock(){
+    const stockEl=document.getElementById('stock'); stockEl.innerHTML='';
+    if(this.stock.length>0){
+      let cardEl=document.createElement('div');
+      cardEl.className='card face-down';
+      // keep pointer cursor on stock container, not card itself
+      stockEl.appendChild(cardEl);
+    }
+  }
+
+  renderWaste(){
+    const wasteEl=document.getElementById('waste'); wasteEl.innerHTML='';
+    if(this.waste.length>0){
+      const card=this.waste[this.waste.length-1];
+      const ce=this.createCardElement(card);
+      // place it relatively inside waste
+      ce.style.position='absolute';
+      ce.style.left='10px';
+      ce.style.top='10px';
+      ce.dataset.pile='waste';
+      wasteEl.appendChild(ce);
+    }
+  }
+
+  renderFoundations(){
+    for(let i=0;i<4;i++){
+      const el=document.getElementById(`foundation-${i}`); el.innerHTML='';
+      if(this.foundations[i].length>0){
+        const top=this.foundations[i][this.foundations[i].length-1];
+        const ce=this.createCardElement(top);
+        ce.style.position='absolute';
+        ce.style.left='10px';
+        ce.style.top='10px';
+        ce.dataset.pile=`foundation-${i}`;
+        // prevent dragging from foundation
+        ce.classList.add('no-drag');
+        el.appendChild(ce);
+      }
+    }
+  }
+
+  renderTableau(){
+    for(let i=0;i<7;i++){
+      const el=document.getElementById(`tableau-${i}`); el.innerHTML='';
+      this.tableau[i].forEach((card,index)=>{
+        const cardEl=this.createCardElement(card);
+        cardEl.style.top=`${index*25}px`;
+        cardEl.dataset.pile=`tableau-${i}`;
+        cardEl.dataset.index=index;
+        // ensure stacking order
+        cardEl.style.zIndex = index+1;
+        el.appendChild(cardEl);
+      });
+    }
+  }
+
+  createCardElement(card){
+    const el=document.createElement('div');
+    // keep classes separate so face-down class works correctly
+    el.classList.add('card');
+    if(card.color==='red') el.classList.add('red');
+    if(!card.faceUp) el.classList.add('face-down');
+    el.dataset.id=card.id;
+    el.innerHTML=card.faceUp?`${card.rank}${card.suit}`:'🂠';
+    // event handlers
+    el.addEventListener('mousedown', (e)=>this.startDrag(e,card));
+    el.addEventListener('touchstart', (e)=>this.startDrag(e,card), {passive:false});
+    return el;
+  }
+
+  startDrag(e,card){
+    // don't allow dragging face-down or cards that are in foundations (no-drag)
+    const targetEl = e.target.closest('.card');
+    if(!targetEl) return;
+    if(targetEl.classList.contains('face-down')) return;
+    // disallow dragging foundation cards
+    const pileEl = targetEl.closest('.tableau-pile') || targetEl.closest('.waste') || targetEl.closest('.foundation');
+    if(pileEl && pileEl.classList.contains('foundation')) return;
+
+    e.preventDefault();
+    this.draggedCard = card;
+
+    // determine source pile: tableau-#, waste, or foundation-# (we disallowed foundation above)
+    if(pileEl){
+      if(pileEl.classList.contains('tableau-pile')) this.draggedFrom = pileEl.id; // e.g. tableau-2
+      else if(pileEl.classList.contains('waste')) this.draggedFrom = 'waste';
+      else this.draggedFrom = pileEl.id;
+    } else {
+      this.draggedFrom = 'waste';
+    }
+
+    const rect = targetEl.getBoundingClientRect();
+    const clientX = (e.clientX !== undefined) ? e.clientX : (e.touches && e.touches[0].clientX);
+    const clientY = (e.clientY !== undefined) ? e.clientY : (e.touches && e.touches[0].clientY);
+    this.offsetX = clientX - rect.left;
+    this.offsetY = clientY - rect.top;
+
+    // attach move/end handlers
+    document.onmousemove = (ev)=>this.drag(ev);
+    document.onmouseup = ()=>this.drop();
+    document.ontouchmove = (ev)=>this.drag(ev);
+    document.ontouchend = ()=>this.drop();
+  }
+
+  drag(e){
+    if(!this.draggedCard) return;
+    // update last pointer coords
+    const clientX = (e.clientX !== undefined) ? e.clientX : (e.touches && e.touches[0].clientX);
+    const clientY = (e.clientY !== undefined) ? e.clientY : (e.touches && e.touches[0].clientY);
+    this.lastX = clientX; this.lastY = clientY;
+
+    const el = document.querySelector(`[data-id='${this.draggedCard.id}']`);
+    if(!el) return;
+    el.classList.add('dragging');
+    el.style.position='fixed';
+    el.style.left=(clientX - this.offsetX) + 'px';
+    el.style.top=(clientY - this.offsetY) + 'px';
+    el.style.zIndex = 2000;
+  }
+
+  drop(){
+    if(!this.draggedCard) return;
+    const el = document.querySelector(`[data-id='${this.draggedCard.id}']`);
+    if(el){
+      el.classList.remove('dragging');
+      // we'll re-render to place elements properly
+      el.style.position='absolute';
+      el.style.left='0';
+      el.style.top='0';
+      el.style.zIndex = '';
+    }
+
+    let moved = false;
+    const x = this.lastX || (window.innerWidth/2);
+    const y = this.lastY || (window.innerHeight/2);
+
+    // try tableau piles
+    const tableauPiles = document.querySelectorAll('.tableau-pile');
+    tableauPiles.forEach((pile, i)=>{
+      const rect = pile.getBoundingClientRect();
+      if(rect.left < x && x < rect.right && rect.top < y && y < rect.bottom){
+        if(this.canMoveTableau(this.draggedCard, this.draggedFrom, i)){
+          this.moveTableau(this.draggedFrom, `tableau-${i}`, this.draggedCard);
+          moved = true; this.moves++; this.score += 5;
+        }
+      }
+    });
+
+    // try foundations
+    const foundationEls = document.querySelectorAll('.foundation');
+    foundationEls.forEach((f, i)=>{
+      const rect = f.getBoundingClientRect();
+      if(rect.left < x && x < rect.right && rect.top < y && y < rect.bottom){
+        if(this.canMoveFoundation(this.draggedCard, i)){
+          // remove from source and push to foundation
+          if(this.draggedFrom === 'waste'){
+            // remove top of waste (should be it)
+            const idx = this.waste.findIndex(c=>c.id===this.draggedCard.id);
+            if(idx!==-1) this.waste.splice(idx,1);
+          } else if(this.draggedFrom.startsWith('tableau-')){
+            const fromIdx = parseInt(this.draggedFrom.split('-')[1]);
+            const col = this.tableau[fromIdx];
+            const index = col.findIndex(c=>c.id===this.draggedCard.id);
+            if(index!==-1) col.splice(index);
+            // after removing, flip top card if exists
+            if(this.tableau[fromIdx].length>0) this.tableau[fromIdx][this.tableau[fromIdx].length-1].faceUp = true;
+          }
+          this.foundations[i].push(this.draggedCard);
+          moved = true; this.moves++; this.score += 10;
+        }
+      }
+    });
+
+    // if not moved and source was waste, keep waste as it was (no action)
+    // if not moved and source was tableau, nothing changes (we re-render)
+    this.draggedCard = null;
+    this.draggedFrom = null;
+
+    this.render();
+    this.checkWin();
+  }
+
+  canMoveTableau(card, from, toIndex){
+    const dest = this.tableau[toIndex];
+    if(dest.length === 0) return card.rank === 'K';
+    const top = dest[dest.length-1];
+    const val = this.ranks.indexOf(card.rank);
+    const topVal = this.ranks.indexOf(top.rank);
+    return card.color !== top.color && val === topVal - 1;
+  }
+
+  moveTableau(fromId, toId, card){
+    // fromId: 'waste' or 'tableau-N'
+    // toId: 'tableau-N'
+    // identify source column array
+    let colFrom;
+    if(fromId === 'waste') colFrom = this.waste;
+    else if(fromId && fromId.startsWith('tableau-')) colFrom = this.tableau[parseInt(fromId.split('-')[1])];
+    else colFrom = null;
+
+    if(!colFrom) return;
+
+    const index = colFrom.findIndex(c=>c.id===card.id);
+    if(index === -1) return;
+    const moving = colFrom.splice(index); // takes card and any below (stack)
+    const toIdx = parseInt(toId.split('-')[1]);
+    this.tableau[toIdx] = this.tableau[toIdx].concat(moving);
+    // flip top card of source tableau if needed
+    if(fromId.startsWith('tableau-')){
+      const f = parseInt(fromId.split('-')[1]);
+      if(this.tableau[f].length>0) this.tableau[f][this.tableau[f].length-1].faceUp = true;
+    } else if(fromId === 'waste'){
+      // nothing else
+    }
+  }
+
+  canMoveFoundation(card, index){
+    const pile = this.foundations[index];
+    if(pile.length === 0) return card.rank === 'A';
+    const top = pile[pile.length-1];
+    const val = this.ranks.indexOf(card.rank);
+    const topVal = this.ranks.indexOf(top.rank);
+    return card.suit === top.suit && val === topVal + 1;
+  }
+
+  bindEvents(){
+    document.getElementById('stock').onclick = ()=>this.drawCard();
+    // also allow clicking waste top to do nothing special (drag handled)
+  }
+
+  drawCard(){
+    if(this.stock.length === 0){
+      // recycle waste into stock (preserve order: top of waste becomes top of stock after flipping)
+      if(this.waste.length === 0) return;
+      // reverse waste and flip faceDown
+      this.stock = this.waste.slice().reverse().map(c=>{ c.faceUp = false; return c; });
+      this.waste = [];
+      // no score change here (keeps simple scoring)
+    } else {
+      const card = this.stock.pop();
+      card.faceUp = true;
+      this.waste.push(card);
+      this.moves++;
+      this.score++;
+    }
+    this.render();
+    this.checkWin();
+  }
+
+  updateTime(){
+    const diff=Math.floor((Date.now()-this.startTime)/1000);
+    const m=Math.floor(diff/60).toString().padStart(2,'0');
+    const s=(diff%60).toString().padStart(2,'0');
+    document.getElementById('time').innerText=`${m}:${s}`;
+  }
+
+  checkWin(){
+    if(this.foundations.every(f=>f.length===13)){
+      this.showWin();
+    }
+  }
+
+  showWin(){
+    document.getElementById('winMessage').style.display='block';
+    document.getElementById('finalTime').innerText=document.getElementById('time').innerText;
+    document.getElementById('finalMoves').innerText=this.moves;
+    document.getElementById('finalScore').innerText=this.score;
+    this.startConfetti();
+  }
+
+  closeWinMessage(){
+    document.getElementById('winMessage').style.display='none';
+    document.getElementById('celebration').innerHTML='';
+    this.newGame();
+  }
+
+  startConfetti(){
+    const c=document.getElementById('celebration'); c.innerHTML='';
+    for(let i=0;i<100;i++){
+      const d=document.createElement('div'); d.className='confetti';
+      d.style.left=Math.random()*window.innerWidth+'px';
+      d.style.backgroundColor=`hsl(${Math.random()*360},70%,60%)`;
+      d.style.top = (-Math.random()*200) + 'px';
+      d.style.transform = `rotate(${Math.random()*360}deg)`;
+      c.appendChild(d);
+    }
+    setTimeout(()=>{ c.innerHTML=''; },3000);
+  }
+}
+
+const game = new Solitaire();
   }
 
   render(){
