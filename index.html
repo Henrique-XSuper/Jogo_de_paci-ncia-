@@ -791,20 +791,88 @@ class Solitaire {
         }
       }
     }
-    this.tableau[colIndex] = this.tableau[colIndex].concat(this.draggedStack);
-  }
-  canMoveToFoundation(card,foundIndex) {
-    const pile = this.foundations[foundIndex];
-    if (pile.length === 0) return card.rank === 'A';
 
-    const top = pile[pile.length - 1];
-    const cardVal = this.ranks.indexOf(card.rank);
-    const topVal = this.ranks.indexOf(top.rank);
-
-  return card.suit === top.suit && cardVal === topVal + 1;
+    // Adicionar à foundation
+    this.foundations[foundIndex].push(card);
+    this.score += 10;
   }
-  moveToFoundation(foundIndex) {
-    const card = this.draggedStack[0];
+
+  bindEvents() {
+    document.getElementById('stock').onclick = () => this.drawCard();
+  }
+
+  drawCard() {
+    if (this.stock.length === 0) {
+      // Reciclar waste para stock
+      if (this.waste.length === 0) return;
+      
+      this.stock = [...this.waste].reverse();
+      this.stock.forEach(card => card.faceUp = false);
+      this.waste = [];
+      this.moves++;
+    } else {
+      const card = this.stock.pop();
+      card.faceUp = true;
+      this.waste.push(card);
+      this.moves++;
+      this.score++;
+    }
     
+    this.render();
+  }
+
+  updateTime() {
+    const diff = Math.floor((Date.now() - this.startTime) / 1000);
+    const m = Math.floor(diff / 60).toString().padStart(2, '0');
+    const s = (diff % 60).toString().padStart(2, '0');
+    document.getElementById('time').innerText = `${m}:${s}`;
+  }
+
+  checkWin() {
+    if (this.foundations.every(f => f.length === 13)) {
+      this.showWin();
+    }
+  }
+
+  showWin() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
     
+    document.getElementById('winMessage').style.display = 'block';
+    document.getElementById('finalTime').innerText = document.getElementById('time').innerText;
+    document.getElementById('finalMoves').innerText = this.moves;
+    document.getElementById('finalScore').innerText = this.score;
+    this.startConfetti();
+  }
+
+  closeWinMessage() {
+    document.getElementById('winMessage').style.display = 'none';
+    document.getElementById('celebration').innerHTML = '';
+    this.newGame();
+  }
+
+  startConfetti() {
+    const celebration = document.getElementById('celebration');
+    celebration.innerHTML = '';
     
+    for (let i = 0; i < 100; i++) {
+      const confetti = document.createElement('div');
+      confetti.className = 'confetti';
+      confetti.style.left = Math.random() * window.innerWidth + 'px';
+      confetti.style.backgroundColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
+      confetti.style.animationDelay = Math.random() * 3 + 's';
+      celebration.appendChild(confetti);
+    }
+    
+    setTimeout(() => {
+      celebration.innerHTML = '';
+    }, 6000);
+  }
+}
+
+const game = new Solitaire();
+</script>
+</body>
+</html>
